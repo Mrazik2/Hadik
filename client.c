@@ -1,13 +1,18 @@
 #include <stdio.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <curses.h>
+#include <arpa/inet.h>
+#include <string.h>
 
-#define PORT 16767
+#define PORT 16769
 
 typedef struct {
   int stavHry;
+  int client_fd;
+  struct sockaddr_in server_addr;
 } data_t;
 
 
@@ -22,7 +27,7 @@ void* checkInput(void* arg) {
   return NULL;
 }
 
-int newGame(data_t* data) {  
+int newGame() {  
   char gameMode[2];
   gameMode[1] = 0;
   char worldType[2];
@@ -179,7 +184,7 @@ int newGame(data_t* data) {
   mvaddstr(1, 10, "Stlac hociake tlacidlo pre start");
   getch();
 
-
+  
   const pid_t id = fork();
   if (id < 0) {
     perror("Fork zlyhal");
@@ -189,30 +194,39 @@ int newGame(data_t* data) {
     fprintf(stderr, "execlp failed\n");
     exit(-1);
   }
-
+  
+  
   return 1;
+}
+
+int connectToServer(data_t* data) {
+  clear();
+  data->client_fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (data->client_fd < 0) {
+    return -1;
+  }
+
+  memset(&data->server_addr, 0, sizeof(data->server_addr));
+  data->server_addr.sin_family = AF_INET;
+  data->server_addr.sin_port = htons(PORT);
+  if (inet_pton(AF_INET, "127.0.0.1", (struct sockaddr*)&data->server_addr.sin_addr) < 0) {
+    close(data->client_fd);
+    return -2;
+  }
+
+  if (connect(data->client_fd, (struct sockaddr*)&data->server_addr, sizeof(data->server_addr)) < 0) {
+    close(data->client_fd);
+    return -3;
+  }
+
+  return 0;
 }
 
 
 int main(void) {
   data_t data;
   data.stavHry = 0;
-  
-  /*
-  const pid_t id = fork();
-  if (id < 0) {
-    perror("Fork failed");
-    return -1;
-  } else if (id == 0) {
-    execlp("./server", "./server", NULL);
-    perror("execlp failed");
-    return -2;
-  }
 
-  wait(NULL);
-  printf("Hello from id: %d\n", id);
-
-  */
 
   initscr();
   keypad(stdscr, true);
@@ -228,10 +242,6 @@ int main(void) {
 
   int selected = 0;
   int count = 3;
-
-  getch();
-  exit(-1);
-
 
   while(1) {
     clear();
@@ -257,19 +267,38 @@ int main(void) {
 
     if (input == 10) {
       if (selected == 0) {
-        data.stavHry = newGame(&data);
+        if (newGame()) {
+          sleep(1);
+          int vysl = connectToServer(&data);
+          if (vysl == 0) {
+            mvaddstr(6, 10, "Ok");
+          } else if (vysl == -1) {
+            mvaddstr(6, 10, "socket");
+          } else if (vysl == -2) {
+            mvaddstr(6, 10, "inet_pton");
+          } else {
+            mvaddstr(6, 10, "connect");
+          }
+
+          refresh();
+
+          char buffer[100];
+          recv(data.client_fd, buffer, 99, 0);
+          mvaddstr(10, 10, buffer);
+          getch();
+        }
       } else if (selected == 1) {
         continue;
       } else {
         break;
       }
     }
-
   }
 
 
   
   endwin();
+  close(data.client_fd);
 
   return 0;
 }
