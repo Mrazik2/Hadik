@@ -170,7 +170,10 @@ int newGame() {
       }
 
       if (input == 'y') {
-        FILE *fptr = fopen(fileName, "r");
+        char buffer[50];
+        strcpy(buffer, "../maps/");
+        strcat(buffer, fileName);
+        FILE *fptr = fopen(buffer, "r");
         if (fptr != NULL) {
           fclose(fptr);
           break;
