@@ -6,24 +6,82 @@
 #include <curses.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <pthread.h>
+#include <ctype.h>
 
-#define PORT 16769
+#define PORT 17777
 
+
+// 0 - nie je v hre, 1 - je pozastaveny, 2 - nema hadika, 3 - ma hadika
 typedef struct {
   int stavHry;
   int client_fd;
   struct sockaddr_in server_addr;
+  pthread_mutex_t* mutex;
 } data_t;
 
 
 
 void* checkInput(void* arg) {
+  data_t* data = (data_t*)arg;
+  char buffer[10];
+  memset(buffer, 0, 10);
 
-  while (1) {
+  while (data->stavHry > 1) {
     int input = getch();
-
-
+    if (input == KEY_UP || tolower(input) == 'w') {
+      strcpy(buffer, "w");
+    } else if (input == KEY_RIGHT || tolower(input) == 'd') {
+      strcpy(buffer, "d");
+    } else if (input == KEY_DOWN || tolower(input) == 's') {
+      strcpy(buffer, "s");
+    } else if (input == KEY_LEFT || tolower(input) == 'a') {
+      strcpy(buffer, "a");
+    } else if (tolower(input) == 'x') {
+      strcpy(buffer, "x");
+    } else {
+      continue;
+    }
+    send(data->client_fd, buffer, strlen(buffer), 0);
+    if (tolower(input) == 'x') {
+      break;
+    }
   }
+
+  return NULL;
+}
+
+void* draw(void* arg) {
+  data_t* data = (data_t*)arg;
+  int bufferSize = 30;
+  char buffer[bufferSize];
+ 
+  while(data->stavHry > 1) {
+    memset(buffer, 0, bufferSize);
+    if (recv(data->client_fd, buffer, bufferSize, 0) <= 0) {
+      break;
+    }
+    clear();
+    mvaddstr(1, 10, buffer);
+    data->stavHry = atoi(buffer);
+    memset(buffer, 0, bufferSize);
+    if (recv(data->client_fd, buffer, bufferSize, 0) <= 0) {
+      break;
+    }
+    mvaddstr(2, 10, buffer);
+    int lines = atoi(buffer);
+    for (int i = 0; i < lines; i++) {
+      memset(buffer, 0, bufferSize);
+      if (recv(data->client_fd, buffer, bufferSize, 0) <= 0) {
+        break;
+      }
+      mvaddstr(3 + i, 30, buffer);
+    }
+    refresh();
+  }
+
+
+
   return NULL;
 }
 
@@ -39,7 +97,7 @@ int newGame() {
   height[3] = 0;
 
   char timeIn[4];
-  char fileName[30];
+  char fileName[50];
 
   clear();
   mvaddstr(1, 10, "Zvol herny rezim - standardny alebo casovy (s/c)");
@@ -93,10 +151,10 @@ int newGame() {
     while (1) {
       clear();
       int input = 0;
-      mvaddstr(1, 10, "Zadaj sirku sveta");
+      mvaddstr(1, 10, "Zadaj sirku sveta <9, 18>");
 
 
-      getnstr(width, 3);
+      getnstr(width, 2);
 
       while (1) {
         clear();
@@ -111,7 +169,7 @@ int newGame() {
         }
       }
 
-      if (input == 'y' && atoi(width) > 0) {
+      if (input == 'y' && atoi(width) > 8 && atoi(width) <= 20) {
         break;
       }
     }
@@ -119,10 +177,10 @@ int newGame() {
     while (1) {
       clear();
       int input = 0;
-      mvaddstr(1, 10, "Zadaj vysku sveta");
+      mvaddstr(1, 10, "Zadaj vysku sveta <9, 18>");
 
 
-      getnstr(height, 3);
+      getnstr(height, 2);
 
       while (1) {
         clear();
@@ -137,7 +195,7 @@ int newGame() {
         }
       }
 
-      if (input == 'y' && atoi(height) > 0) {
+      if (input == 'y' && atoi(height) > 8 && atoi(height) <= 20) {
         break;
       }
     }
@@ -170,12 +228,13 @@ int newGame() {
       }
 
       if (input == 'y') {
-        char buffer[50];
-        strcpy(buffer, "../maps/");
-        strcat(buffer, fileName);
-        FILE *fptr = fopen(buffer, "r");
+        char fileBuffer[50];
+        strcpy(fileBuffer, "../maps/");
+        strcat(fileBuffer, fileName);
+        FILE* fptr = fopen(fileBuffer, "r");
         if (fptr != NULL) {
           fclose(fptr);
+          strcpy(fileName, fileBuffer);
           break;
         }
       }
@@ -204,7 +263,9 @@ int newGame() {
 
 int connectToServer(data_t* data) {
   clear();
-  data->client_fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (data->stavHry == 0) {
+    data->client_fd = socket(AF_INET, SOCK_STREAM, 0);
+  }
   if (data->client_fd < 0) {
     return -1;
   }
@@ -225,10 +286,41 @@ int connectToServer(data_t* data) {
   return 0;
 }
 
+void startGame(data_t* data, int continueGame) {
+  pthread_t reader;
+  pthread_t writer;
+
+  data->stavHry = 2;
+
+  if (pthread_create(&reader, NULL, checkInput, data) < 0) {
+    perror("Chyba pri vytvarani threadu");
+    exit(-1);
+  }
+  if (pthread_create(&writer, NULL, draw, data) < 0) {
+    perror("Chyba pri vytvarani threadu");
+    exit(-1);
+  }
+
+  if (pthread_join(reader, NULL) < 0) {
+    perror("Chyba pri joine threadu");
+    exit(-1);
+  }
+
+  if (pthread_join(writer, NULL) < 0) {
+    perror("Chyba pri joine threadu");
+    exit(-1);
+  }  
+  
+}
+
 
 int main(void) {
   data_t data;
   data.stavHry = 0;
+
+  pthread_mutex_t mutex;
+  pthread_mutex_init(&mutex, NULL);
+  data.mutex = &mutex;
 
 
   initscr();
@@ -261,10 +353,10 @@ int main(void) {
 
     int input = getch();
 
-    if (input == KEY_DOWN && selected < count - 1) {
+    if ((input == KEY_DOWN || tolower(input) == 's') && selected < count - 1) {
       selected++;
     }
-    if (input == KEY_UP && selected > 0) {
+    if ((input == KEY_UP || tolower(input) == 'w') && selected > 0) {
       selected--;
     }
 
@@ -272,6 +364,8 @@ int main(void) {
       if (selected == 0) {
         if (newGame()) {
           sleep(1);
+          connectToServer(&data);
+          /*
           int vysl = connectToServer(&data);
           if (vysl == 0) {
             mvaddstr(6, 10, "Ok");
@@ -289,16 +383,18 @@ int main(void) {
           recv(data.client_fd, buffer, 99, 0);
           mvaddstr(10, 10, buffer);
           getch();
+          */
+          startGame(&data, 0);
         }
       } else if (selected == 1) {
-        continue;
+        startGame(&data, 1);
       } else {
         break;
       }
     }
   }
 
-
+  pthread_mutex_destroy(&mutex);
   
   endwin();
   close(data.client_fd);

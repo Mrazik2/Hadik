@@ -13,4 +13,5 @@ target_compile_options(client PRIVATE "-std=c11" "-Wall" "-Wextra" "-Wpedantic")
 
 add_executable(server)
 target_sources(server PRIVATE server.c)
+target_link_libraries(server PRIVATE ncurses)
 target_compile_options(server PRIVATE "-std=c11" "-Wall" "-Wextra" "-Wpedantic")
