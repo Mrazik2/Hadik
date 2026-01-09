@@ -7,7 +7,7 @@ void movement(snake_t* snake) {
   int yTo = snake->position[0].y;
 
   snake->position[0].x += snake->direction[0];
- snake->position[0].y += snake->direction[1];
+  snake->position[0].y += snake->direction[1];
   for (int i = 1; i < snake->size; i++) {
     int xFrom = snake->position[i].x;
     int yFrom = snake->position[i].y;
@@ -23,8 +23,15 @@ void movement(snake_t* snake) {
 }
 
 int collisionCheck(snake_t* snake, position_t* apple, map_t* map) {
-
-  return 0;
+  int headX = snake->position[0].x;
+  int headY = snake->position[0].y;
+  if (map->map[headY][headX] == ' ') {
+    return 0;
+  } else if (map->map[headY][headX] == APPLE_IMG) {
+    return 1;
+  } else {
+    return 2;
+  }
 }
 
 void redraw(snake_t* snake, position_t* apple, map_t* map, int collision) {
@@ -37,10 +44,12 @@ void redraw(snake_t* snake, position_t* apple, map_t* map, int collision) {
   } else if (collision == 1) {
     map->map[snake->position[0].y][snake->position[0].x] = SNAKE_HEAD;
     map->map[snake->position[1].y][snake->position[1].x] = SNAKE_BODY;
-    map->map[apple->y][apple->x] = APPLE_IMG;
+    snake->size++;
+    //map->map[apple->y][apple->x] = APPLE_IMG;
   } else {
     for (int i = 1; i < snake->size + 1; i++) {
       map->map[snake->position[i].y][snake->position[i].x] = ' ';
+      snake->state = DEAD;
     }
   }
 }
@@ -60,7 +69,7 @@ int initMap(map_t* map, int fromFile, char* fileName, int width, int height) {
     map->actualHeight = fHeight;
     for (int i = 0; i < fHeight; i++) {
       memset(buffer, 0, MAX_WIDTH + 1);
-      fgets(buffer, MAX_WIDTH + 1, fptr);
+      fgets(buffer, MAX_WIDTH, fptr);
       strcpy(map->map[i], buffer);
     }
 
@@ -68,9 +77,6 @@ int initMap(map_t* map, int fromFile, char* fileName, int width, int height) {
   } else {
     map->actualWidth = width + 2;
     map->actualHeight = height + 2;
-    for (int i = 0; i < map->actualHeight; i++) {
-      map->map[i][map->actualWidth] = 0;
-    }
     memset(map->map[0], '#', map->actualWidth);
     for (int i = 1; i < map->actualHeight - 1; i++) {
       memset(map->map[i], ' ', map->actualWidth);

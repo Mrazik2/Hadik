@@ -7,12 +7,13 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/time.h>
+#include <ncurses.h>
 
 #include "communication.h"
 #include "game.h"
 
 
-#define FRAME_TIME_MS 125
+#define FRAME_TIME_MS 200
 
 typedef struct {
   int client_fd;
@@ -39,36 +40,39 @@ int isNotOpposite(int curX, int curY, int newX, int newY) {
 
 void* readInput(void* arg) {
   data_t* data = (data_t*)arg;
-  int bufferSize = 10;
-  char buffer[bufferSize];
+
+  int buffer;
   int x = 1;
   int y = 0;
 
   while (data->snake->state != FROZEN) {
-    if (recv(data->client_data->client_fd, buffer, bufferSize, 0) <= 0) {
+    if (recvAll(data->client_data->client_fd, &buffer, sizeof(buffer)) < 0) {
+      pthread_mutex_lock(data->mutex);
       data->snake->state = FROZEN;
+      pthread_mutex_unlock(data->mutex);
       break;
     }
-    if (strcmp(buffer, "x") == 0) {
+    if (buffer == 'x') {
       pthread_mutex_lock(data->mutex);
       data->snake->state = FROZEN;
       pthread_mutex_unlock(data->mutex);
       continue;
-    } else if (strcmp(buffer, "w") == 0 && isNotOpposite(x, y, 0, -1)) {
+    } else if (buffer == 'w' && isNotOpposite(x, y, 0, -1)) {
       x = 0;
       y = -1;
-    } else if (strcmp(buffer, "d") == 0 && isNotOpposite(x, y, 1, 0)) {
+    } else if (buffer == 'd' && isNotOpposite(x, y, 1, 0)) {
       x = 1;
       y = 0;
-    } else if (strcmp(buffer, "s") == 0 && isNotOpposite(x, y, 0, 1)) {
+    } else if (buffer == 's' && isNotOpposite(x, y, 0, 1)) {
       x = 0;
       y = 1;
-    } else if (strcmp(buffer, "a") == 0 && isNotOpposite(x, y, -1, 0)) {
+    } else if (buffer == 'a' && isNotOpposite(x, y, -1, 0)) {
       x = -1;
       y = 0;
     } else {
       continue;
     }
+
     pthread_mutex_lock(data->mutex);
     data->snake->direction[0] = x;
     data->snake->direction[1] = y;
@@ -78,96 +82,40 @@ void* readInput(void* arg) {
   return NULL;
 }
 
-/*
-void movement(data_t* data) {
-  pthread_mutex_lock(data->mutex);
-  int xTo = data->snake->position[0].x;
-  int yTo = data->snake->position[0].y;
-
-  data->snake->position[0].x += data->snake->direction[0];
-  data->snake->position[0].y += data->snake->direction[1];
-  for (int i = 1; i < data->snake->size; i++) {
-    int xFrom = data->snake->position[i].x;
-    int yFrom = data->snake->position[i].y;
-    
-    data->snake->position[i].x = xTo;
-    data->snake->position[i].y = yTo;
-
-    xTo = xFrom;
-    yTo = yFrom;
-  }
-  data->snake->position[data->snake->size].x = xTo;
-  data->snake->position[data->snake->size].y = yTo;
-  pthread_mutex_unlock(data->mutex);
-}
-
-int collisionCheck(data_t* data) {
-  return 0;
-}
-
-void redraw(data_t* data, int collision) {
-  if (collision == 0) {
-    data->map->map[data->snake->position[data->snake->size].y][data->snake->position[data->snake->size].x] = ' ';
-    data->map->map[data->snake->position[0].y][data->snake->position[0].x] = SNAKE_HEAD;
-    if (data->snake->size > 1) {
-      data->map->map[data->snake->position[1].y][data->snake->position[1].x] = SNAKE_BODY;
-    }
-  } else if (collision == 1) {
-    data->map->map[data->snake->position[0].y][data->snake->position[0].x] = SNAKE_HEAD;
-    data->map->map[data->snake->position[1].y][data->snake->position[1].x] = SNAKE_BODY;
-    data->map->map[data->apple->y][data->apple->x] = APPLE_IMG;
-  } else {
-    for (int i = 1; i < data->snake->size + 1; i++) {
-      data->map->map[data->snake->position[i].y][data->snake->position[i].x] = ' ';
-    }
-  }
-}
-*/
-
 void* gameLoop(void* arg) {
   data_t* data = (data_t*)arg;
 
-  char buffer[30];
   initGame(data->map, data->snake, data->apple);
 
   struct timeval tvalBefore, tvalAfter;
   gettimeofday(&tvalBefore, NULL);
 
-  /*
-  data->snake->position[0].x = 4;
-  data->snake->position[0].y = 8;
-  data->apple->x = 8;
-  data->apple->y = 8;
-  data->map->map[data->snake->position[0].y][data->snake->position[0].x] = SNAKE_HEAD;
-  data->map->map[data->apple->y][data->apple->x] = APPLE_IMG;
-  */
+  sendAll(data->client_data->client_fd, &data->map->actualWidth, sizeof(data->map->actualWidth));
+  sendAll(data->client_data->client_fd, &data->map->actualHeight, sizeof(data->map->actualHeight));
 
+  int state;
   while (data->snake->state != FROZEN) {
-    sprintf(buffer, "%d", data->snake->state);
-
-
-    send(data->client_data->client_fd, buffer, strlen(buffer), 0);
-
-
-
-
-    sprintf(buffer, "%d", data->map->actualHeight);
-    if (send(data->client_data->client_fd, buffer, strlen(buffer), 0) <= 0) {
-      break;
-    }
+    pthread_mutex_lock(data->mutex);
+    state = data->snake->state;
+    pthread_mutex_unlock(data->mutex);
+    sendAll(data->client_data->client_fd, &state, sizeof(state));
 
     for (int i = 0; i < data->map->actualHeight; i++) {
-      if (send(data->client_data->client_fd, data->map->map[i], data->map->actualWidth, 0) <= 0) {
-        break;
-      }
+      sendAll(data->client_data->client_fd, data->map->map[i], data->map->actualWidth);
     }
-    sleep(3);
 
+    if (data->snake->state != DEAD) {
+      pthread_mutex_lock(data->mutex);
+      movement(data->snake);
+      int coll = collisionCheck(data->snake, data->apple, data->map);
+      redraw(data->snake, data->apple, data->map, coll);
+      pthread_mutex_unlock(data->mutex);
+    }
 
     gettimeofday(&tvalAfter, NULL);
     long difference = ((tvalAfter.tv_sec - tvalBefore.tv_sec)*1000000L + tvalAfter.tv_usec) - tvalBefore.tv_usec;
-    if (difference < 125000) {
-      usleep(125000 - difference);
+    if (difference < FRAME_TIME_MS * 1000) {
+      usleep(FRAME_TIME_MS * 1000 - difference);
     }
     gettimeofday(&tvalBefore, NULL);
   }
@@ -195,7 +143,7 @@ int main(int argc, char **argv) {
   }
 
   int opt = 1;
-  if (setsockopt(serverData.server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+  if (setsockopt(serverData.server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt)) < 0) {
     perror("Chyba pri volani setsockopt");
     return -2;
   }
@@ -225,7 +173,6 @@ int main(int argc, char **argv) {
     return -5;
   }
   
- 
 
   map_t map;
   int fromFile;
@@ -241,52 +188,9 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  /*
-  if (strcmp(argv[2], "s") == 0) {
-    FILE* fptr = fopen(argv[6], "r");
-    int width;
-    int height;
-    char buffer[21];
-    if (fscanf(fptr, "%d %d", &width, &height) < 2) {
-      close(clientData.client_fd);
-      close(serverData.server_fd);
-      fclose(fptr);
-      perror("Chyba vo formate file");
-      exit(-1);
-    }
-    map.actualWidth = width;
-    map.actualHeight = height;
-    for (int i = 0; i < height; i++) {
-      fgets(buffer, sizeof(buffer), fptr);
-      strcpy(map.map[i], buffer);
-    }
-
-    fclose(fptr);
-  } else {
-    map.actualWidth = atoi(argv[4]) + 2;
-    map.actualHeight = atoi(argv[5]) + 2;
-    for (int i = 0; i < map.actualHeight; i++) {
-      map.map[i][map.actualWidth] = 0;
-    }
-    memset(map.map[0], '#', map.actualWidth);
-    for (int i = 1; i < map.actualHeight - 1; i++) {
-      memset(map.map[i], ' ', map.actualWidth);
-      map.map[i][0] = '#';
-      map.map[i][map.actualWidth - 1] = '#';
-    }
-    memset(map.map[map.actualHeight - 1], '#', map.actualWidth);
-  }
-  */
-
   data.map = &map;
 
   snake_t snake;
-  /*
-  snake.size = 1;
-  snake.direction[0] = 1;
-  snake.direction[1] = 0;
-  snake.state = ALIVE;
-  */
   
   if (strcmp(argv[1], "c") == 0) {
     data.timeLeft = atoi(argv[3]);

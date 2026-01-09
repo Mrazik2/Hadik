@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 
-#define PORT 17777
+#define PORT 17781
 
 int sendAll(int fd, void* buffer, size_t size);
 int recvAll(int fd, void* buffer, size_t size);

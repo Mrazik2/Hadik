@@ -31,7 +31,7 @@ typedef struct {
 } snake_t;
 
 typedef struct {
-  char map[MAX_HEIGHT + 1][MAX_WIDTH + 1];
+  char map[MAX_HEIGHT][MAX_WIDTH];
   int actualWidth;
   int actualHeight;
 } map_t;
