@@ -7,11 +7,11 @@ project(Hadik
 set(CMAKE_C_STANDARD 11)
 
 add_executable(client)
-target_sources(client PRIVATE client.c)
+target_sources(client PRIVATE client.c communication.c menu.c)
 target_link_libraries(client PRIVATE ncurses)
 target_compile_options(client PRIVATE "-std=c11" "-Wall" "-Wextra" "-Wpedantic")
 
 add_executable(server)
-target_sources(server PRIVATE server.c)
+target_sources(server PRIVATE server.c communication.c game.c)
 target_link_libraries(server PRIVATE ncurses)
 target_compile_options(server PRIVATE "-std=c11" "-Wall" "-Wextra" "-Wpedantic")
