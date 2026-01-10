@@ -6,8 +6,10 @@ void movement(snake_t* snake) {
   int xTo = snake->position[0].x;
   int yTo = snake->position[0].y;
 
-  snake->position[0].x += snake->direction[0];
-  snake->position[0].y += snake->direction[1];
+  snake->position[0].x += snake->nDirection[0];
+  snake->position[0].y += snake->nDirection[1];
+  snake->direction[0] = snake->nDirection[0];
+  snake->direction[1] = snake->nDirection[1];
   for (int i = 1; i < snake->size; i++) {
     int xFrom = snake->position[i].x;
     int yFrom = snake->position[i].y;
@@ -93,6 +95,8 @@ int initGame(map_t* map, snake_t* snake, position_t* apple) {
   snake->size = 1;
   snake->direction[0] = 1;
   snake->direction[1] = 0;
+  snake->nDirection[0] = 1;
+  snake->nDirection[1] = 0;
   snake->state = ALIVE;
 
   snake->position[0].x = 4;

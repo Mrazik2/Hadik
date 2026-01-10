@@ -42,8 +42,6 @@ void* readInput(void* arg) {
   data_t* data = (data_t*)arg;
 
   int buffer;
-  int x = 1;
-  int y = 0;
 
   while (data->snake->state != FROZEN) {
     if (recvAll(data->client_data->client_fd, &buffer, sizeof(buffer)) < 0) {
@@ -52,6 +50,12 @@ void* readInput(void* arg) {
       pthread_mutex_unlock(data->mutex);
       break;
     }
+
+    pthread_mutex_lock(data->mutex);
+    int x = data->snake->direction[0];
+    int y = data->snake->direction[1];
+    pthread_mutex_unlock(data->mutex);
+    
     if (buffer == 'x') {
       pthread_mutex_lock(data->mutex);
       data->snake->state = FROZEN;
@@ -74,8 +78,8 @@ void* readInput(void* arg) {
     }
 
     pthread_mutex_lock(data->mutex);
-    data->snake->direction[0] = x;
-    data->snake->direction[1] = y;
+    data->snake->nDirection[0] = x;
+    data->snake->nDirection[1] = y;
     pthread_mutex_unlock(data->mutex);
   }
 

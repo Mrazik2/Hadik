@@ -28,6 +28,7 @@ typedef struct {
   int size;
   state_t state;
   int direction[2];
+  int nDirection[2];
 } snake_t;
 
 typedef struct {

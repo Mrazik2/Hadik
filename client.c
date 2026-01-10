@@ -29,33 +29,6 @@ typedef struct {
 void* checkInput(void* arg) {
   data_t* data = (data_t*)arg;
 
-  /*
-  char buffer[10];
-  memset(buffer, 0, 10);
-
-  while (data->stavHry > 1) {
-    int input = getch();
-    if (input == KEY_UP || tolower(input) == 'w') {
-      strcpy(buffer, "w");
-    } else if (input == KEY_RIGHT || tolower(input) == 'd') {
-      strcpy(buffer, "d");
-    } else if (input == KEY_DOWN || tolower(input) == 's') {
-      strcpy(buffer, "s");
-    } else if (input == KEY_LEFT || tolower(input) == 'a') {
-      strcpy(buffer, "a");
-    } else if (tolower(input) == 'x') {
-      strcpy(buffer, "x");
-    } else {
-      continue;
-    }
-    send(data->client_fd, buffer, strlen(buffer), 0);
-    if (tolower(input) == 'x') {
-      break;
-    }
-  }
-  */
-
-
   while (data->stavHry > 1) {
     int input = getch();
     if (input == KEY_UP || tolower(input) == 'w') {
@@ -89,48 +62,17 @@ void* checkInput(void* arg) {
 void* draw(void* arg) {
   data_t* data = (data_t*)arg;
 
-  /*
-  int bufferSize = 30;
-  char buffer[bufferSize];
- 
-  while(data->stavHry > 1) {
-    memset(buffer, 0, bufferSize);
-    if (recv(data->client_fd, buffer, bufferSize, 0) <= 0) {
-      break;
-    }
-    clear();
-    mvaddstr(1, 10, buffer);
-    data->stavHry = atoi(buffer);
-    memset(buffer, 0, bufferSize);
-    if (recv(data->client_fd, buffer, bufferSize, 0) <= 0) {
-      break;
-    }
-    mvaddstr(2, 10, buffer);
-    int lines = atoi(buffer);
-    for (int i = 0; i < lines; i++) {
-      memset(buffer, 0, bufferSize);
-      if (recv(data->client_fd, buffer, bufferSize, 0) <= 0) {
-        break;
-      }
-      mvaddstr(3 + i, 30, buffer);
-    }
-    refresh();
-  }
-  */
-
   int width = 0;
   int height = 0;
   recvAll(data->client_fd, &width, sizeof(width));
   recvAll(data->client_fd, &height, sizeof(height));
   int buffer;
-  char* map = malloc(width * height);
+  char* map = malloc(width * height + 1);
 
 
   while (data->stavHry > 1) {
     if (recvAll(data->client_fd, &buffer, sizeof(buffer)) < 0) {
       perror("Menej ako 0");
-      refresh();
-      sleep(2);
       break;
     }
     pthread_mutex_lock(data->mutex);
@@ -140,9 +82,7 @@ void* draw(void* arg) {
     mvaddstr(1, 10, buff);
     pthread_mutex_unlock(data->mutex);
     if (recvAll(data->client_fd, map, width * height) < 0) {
-      perror("Menej ako 0 - 2");
-      refresh();
-      sleep(2);
+      perror("Nastala chyba");
       break;
     }
 
@@ -161,8 +101,10 @@ void* draw(void* arg) {
 
 int connectToServer(data_t* data) {
   clear();
-
-  close(data->client_fd);
+  
+  if (data->client_fd != -1) {
+    close(data->client_fd);
+  }
 
   if (data->stavHry == 0) {
     data->client_fd = socket(AF_INET, SOCK_STREAM, 0);

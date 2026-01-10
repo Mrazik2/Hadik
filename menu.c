@@ -113,7 +113,7 @@ int newGameMenu() {
         }
       }
 
-      if (input == 'y' && atoi(width) > 8 && atoi(width) <= 20) {
+      if (input == 'y' && atoi(width) > 8 && atoi(width) <= 18) {
         break;
       }
     }
@@ -139,7 +139,7 @@ int newGameMenu() {
         }
       }
 
-      if (input == 'y' && atoi(height) > 8 && atoi(height) <= 20) {
+      if (input == 'y' && atoi(height) > 8 && atoi(height) <= 18) {
         break;
       }
     }
@@ -198,7 +198,7 @@ int newGameMenu() {
   } else if (id == 0) {
     execlp("./server", "./server", gameMode, worldType, timeIn, width, height, fileName, NULL);
     fprintf(stderr, "execlp failed\n");
-    exit(-1);
+    _exit(-1);
   }
   
   
