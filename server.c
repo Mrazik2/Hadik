@@ -32,6 +32,8 @@ typedef struct {
   map_t* map;
   snake_t* snake;
   position_t* apple;
+  int cooldown;
+  int sendSize;
 } data_t;
 
 int isNotOpposite(int curX, int curY, int newX, int newY) {
@@ -43,12 +45,11 @@ void* readInput(void* arg) {
 
   int buffer;
 
-  while (data->snake->state != FROZEN) {
+  while (data->snake->state != GAME_OVER) {
     if (recvAll(data->client_data->client_fd, &buffer, sizeof(buffer)) < 0) {
-      pthread_mutex_lock(data->mutex);
-      data->snake->state = FROZEN;
-      pthread_mutex_unlock(data->mutex);
-      break;
+      data->snake->state = LEFT;
+      sleep(1);
+      continue;
     }
 
     pthread_mutex_lock(data->mutex);
@@ -58,7 +59,21 @@ void* readInput(void* arg) {
     
     if (buffer == 'x') {
       pthread_mutex_lock(data->mutex);
-      data->snake->state = FROZEN;
+      if (data->snake->state == DEAD) {
+        data->snake->state = DEAD_IN_MENU;
+      } else {
+        data->snake->state = FROZEN_IN_MENU;
+      }
+      pthread_mutex_unlock(data->mutex);
+      continue;
+    } else if (buffer == 'c') {
+      pthread_mutex_lock(data->mutex);
+      if (data->snake->state == DEAD_IN_MENU) {
+        data->snake->state = DEAD;
+      } else {
+        data->snake->state = FROZEN_IN_GAME;
+      }
+      data->sendSize = 1;
       pthread_mutex_unlock(data->mutex);
       continue;
     } else if (buffer == 'w' && isNotOpposite(x, y, 0, -1)) {
@@ -73,6 +88,11 @@ void* readInput(void* arg) {
     } else if (buffer == 'a' && isNotOpposite(x, y, -1, 0)) {
       x = -1;
       y = 0;
+    } else if (buffer == 'r' && data->snake->state == DEAD) {
+      pthread_mutex_lock(data->mutex);
+      initSnake(data->map, data->snake);
+      pthread_mutex_unlock(data->mutex);
+      continue;
     } else {
       continue;
     }
@@ -88,30 +108,59 @@ void* readInput(void* arg) {
 
 void* gameLoop(void* arg) {
   data_t* data = (data_t*)arg;
+  int timePassed = 0;
+  int timePlaying = 0;
+  int timeNoSnake = 0;
+  int finalSend = 0;
 
-  initGame(data->map, data->snake, data->apple);
+  int doNotSend = 0;
+  int justDied = 0;
+
+  sleep(1);
 
   struct timeval tvalBefore, tvalAfter;
   gettimeofday(&tvalBefore, NULL);
 
-  sendAll(data->client_data->client_fd, &data->map->actualWidth, sizeof(data->map->actualWidth));
-  sendAll(data->client_data->client_fd, &data->map->actualHeight, sizeof(data->map->actualHeight));
-
   int state;
-  while (data->snake->state != FROZEN) {
-    pthread_mutex_lock(data->mutex);
-    state = data->snake->state;
-    pthread_mutex_unlock(data->mutex);
-    sendAll(data->client_data->client_fd, &state, sizeof(state));
-
-    for (int i = 0; i < data->map->actualHeight; i++) {
-      sendAll(data->client_data->client_fd, data->map->map[i], data->map->actualWidth);
+  while (data->snake->state != GAME_OVER) {
+    if (data->sendSize) {
+      sendAll(data->client_data->client_fd, &data->map->actualWidth, sizeof(data->map->actualWidth));
+      sendAll(data->client_data->client_fd, &data->map->actualHeight, sizeof(data->map->actualHeight));
+      pthread_mutex_lock(data->mutex);
+      data->sendSize = 0;
+      if (data->snake->state == FROZEN_IN_GAME) {
+        data->cooldown = COOLDOWN_TIME_MS;
+      }
+      pthread_mutex_unlock(data->mutex);
     }
 
-    if (data->snake->state != DEAD) {
+    if (!doNotSend && data->sendSize == 0) {
       pthread_mutex_lock(data->mutex);
-      movement(data->snake);
+      state = data->snake->state;
+      pthread_mutex_unlock(data->mutex);
+      sendAll(data->client_data->client_fd, &state, sizeof(state));
+
+      for (int i = 0; i < data->map->actualHeight; i++) {
+        sendAll(data->client_data->client_fd, data->map->map[i], data->map->actualWidth);
+      }
+
+      sendAll(data->client_data->client_fd, &timePassed, sizeof(timePassed));
+
+      sendAll(data->client_data->client_fd, &data->snake->snakeNum, sizeof(data->snake->snakeNum));
+      sendAll(data->client_data->client_fd, &data->snake->points[data->snake->snakeNum - 1], sizeof(data->snake->points[data->snake->snakeNum - 1]));
+
+      if (data->snake->state == FROZEN_IN_MENU || data->snake->state == DEAD_IN_MENU) {
+        doNotSend = 1;
+      }
+    }
+
+    if (data->snake->state == ALIVE) {
+      pthread_mutex_lock(data->mutex);
+      movement(data->snake, data->map);
       int coll = collisionCheck(data->snake, data->apple, data->map);
+      if (coll == 2) {
+        justDied = 1;
+      }
       redraw(data->snake, data->apple, data->map, coll);
       pthread_mutex_unlock(data->mutex);
     }
@@ -122,6 +171,61 @@ void* gameLoop(void* arg) {
       usleep(FRAME_TIME_MS * 1000 - difference);
     }
     gettimeofday(&tvalBefore, NULL);
+
+    if (data->snake->state == LEFT) {
+      redraw(data->snake, data->apple, data->map, 2);
+      data->snake->state = DEAD_IN_MENU;
+    }
+
+    if (data->snake->state != FROZEN_IN_MENU && data->snake->state != DEAD_IN_MENU) {
+      doNotSend = 0;
+    }
+
+    timePassed += FRAME_TIME_MS;
+    if (data->snake->state != DEAD && data->snake->state != DEAD_IN_MENU) {
+      timePlaying += FRAME_TIME_MS;
+      if (data->timeLeft == -1) {
+        timeNoSnake = 0;
+      }
+    }
+    if ((data->snake->state == DEAD || data->snake->state == DEAD_IN_MENU) && data->timeLeft == -1) {
+      timeNoSnake += FRAME_TIME_MS;
+    }
+    if (data->snake->state == DEAD && justDied) {
+      data->snake->timeAlive[data->snake->snakeNum - 1] = timePlaying;
+      timePlaying = 0;
+      justDied = 0;
+    }
+    if (data->cooldown > 0) {
+      data->cooldown -= FRAME_TIME_MS;
+      if (data->cooldown <= 0) {
+        data->snake->state = ALIVE;
+      }
+    }
+    if (timeNoSnake >= NO_SNAKE_SHUTDOWN_MS || (data->timeLeft != -1 && timePassed >= data->timeLeft)) {
+      if (data->snake->state != FROZEN_IN_MENU && data->snake->state != DEAD_IN_MENU) {
+        finalSend = 1;
+      }
+      if (data->snake->state == ALIVE) {
+        data->snake->timeAlive[data->snake->snakeNum - 1] = timePlaying;
+      }
+      data->snake->state = GAME_OVER;
+    }
+  }
+
+  if (finalSend) {
+    state = data->snake->state;
+    sendAll(data->client_data->client_fd, &state, sizeof(state));
+    for (int i = 0; i < data->map->actualHeight; i++) {
+      sendAll(data->client_data->client_fd, data->map->map[i], data->map->actualWidth);
+    }
+    sendAll(data->client_data->client_fd, &timePassed, sizeof(timePassed));
+    
+    sendAll(data->client_data->client_fd, &data->snake->snakeNum, sizeof(data->snake->snakeNum));
+    for (int i = 0; i < data->snake->snakeNum; i++) {
+      sendAll(data->client_data->client_fd, &data->snake->points[i], sizeof(data->snake->points[i]));
+      sendAll(data->client_data->client_fd, &data->snake->timeAlive[i], sizeof(data->snake->timeAlive[i]));
+    }
   }
 
   return NULL;
@@ -197,12 +301,13 @@ int main(int argc, char **argv) {
   data.map = &map;
 
   snake_t snake;
+  snake.snakeNum = 0;
 
   
   if (strcmp(argv[1], "c") == 0) {
-    data.timeLeft = atoi(argv[3]);
+    data.timeLeft = atoi(argv[3]) * 1000;
   } else {
-    data.timeLeft = -5;
+    data.timeLeft = -1;
   }
   
   data.snake = &snake;
@@ -215,6 +320,9 @@ int main(int argc, char **argv) {
   pthread_mutex_t mutex;
   pthread_mutex_init(&mutex, NULL);
   data.mutex = &mutex;
+  data.sendSize = 1;
+
+  initGame(data.map, data.snake, data.apple);
  
 
   pthread_t reader;
@@ -235,13 +343,6 @@ int main(int argc, char **argv) {
     exit(-1);
   }
 
-  if (pthread_join(reader, NULL) < 0) {
-    perror("Chyba pri joine threadu");
-    pthread_mutex_destroy(&mutex);
-    close(clientData.client_fd);
-    close(serverData.server_fd);
-    exit(-1);
-  }
   if (pthread_join(writer, NULL) < 0) {
     perror("Chyba pri joine threadu");
     pthread_mutex_destroy(&mutex);
@@ -249,10 +350,18 @@ int main(int argc, char **argv) {
     close(serverData.server_fd);
     exit(-1);
   }
-
   pthread_mutex_destroy(&mutex);
   close(clientData.client_fd);
   close(serverData.server_fd);
+
+
+  if (pthread_join(reader, NULL) < 0) {
+    perror("Chyba pri joine threadu");
+    pthread_mutex_destroy(&mutex);
+    close(clientData.client_fd);
+    close(serverData.server_fd);
+    exit(-1);
+  }
 
   return 0;
 }

@@ -16,7 +16,7 @@
 #include "menu.h"
 
 
-// 0 - nie je v hre, 1 - je pozastaveny, 2 - nema hadika, 3 - ma hadika
+// 0 - nie je v hre, 1 - je pozastaveny a v menu, 2 - nema hadika a v menu, 3 - je pozastaveny a v hre, 4 - nema hadika a v hre, 5 - ma hadika
 typedef struct {
   int stavHry;
   int client_fd;
@@ -29,7 +29,10 @@ typedef struct {
 void* checkInput(void* arg) {
   data_t* data = (data_t*)arg;
 
-  while (data->stavHry > 1) {
+  int temp = 'c';
+  sendAll(data->client_fd, &temp, sizeof(temp));
+
+  while (data->stavHry > 2) {
     int input = getch();
     if (input == KEY_UP || tolower(input) == 'w') {
       input = 'w';
@@ -39,15 +42,22 @@ void* checkInput(void* arg) {
       input = 's';
     } else if (input == KEY_LEFT || tolower(input) == 'a') {
       input = 'a';
-    } else if (tolower(input) == 'x') {
+    } else if (tolower(input) == 'x' && data->stavHry > 3) {
       input = 'x';
+    } else if (tolower(input) == 'r' && data->stavHry == 4) {
+      input = 'r';
     } else {
       continue;
     }
     sendAll(data->client_fd, &input, sizeof(input));
-    if (input == 'x') {
+    
+    if (input == 'x' && data->stavHry > 3) {
       pthread_mutex_lock(data->mutex);
-      data->stavHry = 1;
+      if (data->stavHry == 5) {
+        data->stavHry = 1;
+      } else if (data->stavHry == 4) {
+        data->stavHry = 2;
+      }
       pthread_mutex_unlock(data->mutex);
       perror("Odchadzam");
       refresh();
@@ -67,18 +77,21 @@ void* draw(void* arg) {
   recvAll(data->client_fd, &width, sizeof(width));
   recvAll(data->client_fd, &height, sizeof(height));
   int buffer;
+  int buffer2;
+  int buffer3;
   char* map = malloc(width * height + 1);
 
 
-  while (data->stavHry > 1) {
+  while (data->stavHry > 2) {
     if (recvAll(data->client_fd, &buffer, sizeof(buffer)) < 0) {
       perror("Menej ako 0");
       break;
     }
     pthread_mutex_lock(data->mutex);
     data->stavHry = buffer;
-    char buff[10];
+    char buff[50];
     sprintf(buff, "%d", buffer);
+    clear();
     mvaddstr(1, 10, buff);
     pthread_mutex_unlock(data->mutex);
     if (recvAll(data->client_fd, map, width * height) < 0) {
@@ -89,6 +102,36 @@ void* draw(void* arg) {
     for (int i = 0; i < height; i++) {
       mvaddnstr(3 + i, 30, map + i * width, width);
     }
+
+    recvAll(data->client_fd, &buffer, sizeof(buffer));
+    buffer = buffer / 1000;
+    sprintf(buff, "Cas hry: %d sekund", buffer);
+    mvaddstr(2, 10, buff);
+
+    if (data->stavHry == 0) {
+      recvAll(data->client_fd, &buffer, sizeof(buffer));
+      for (int i = 0; i < buffer; i++) {
+        recvAll(data->client_fd, &buffer2, sizeof(buffer2));
+        recvAll(data->client_fd, &buffer3, sizeof(buffer3));
+        sprintf(buff, "Hadik %d: %d bodov, zil %d sekund", i + 1, buffer2, buffer3 / 1000);
+        mvaddstr(40 + i, 30, buff);
+      }
+
+      refresh();
+      break;
+    }
+
+    recvAll(data->client_fd, &buffer, sizeof(buffer));
+    recvAll(data->client_fd, &buffer2, sizeof(buffer2));
+    sprintf(buff, "Hadik %d: %d bodov", buffer, buffer2);
+    mvaddstr(3, 10, buff);
+  
+    mvaddstr(40, 30, "Stlac wasd alebo sipky pre pohyb");
+    mvaddstr(41, 30, "Stlac x pre odchod do hlavneho menu");
+    if (data->stavHry == 4) {
+      mvaddstr(42, 30, "Stlac r pre noveho hadika");
+    }
+
     refresh();
   }
 
@@ -145,7 +188,11 @@ void startGame(data_t* data, int continueGame) {
   pthread_t reader;
   pthread_t writer;
 
-  data->stavHry = 2;
+  if (data->stavHry < 2) {
+    data->stavHry = 3;
+  } else if (data->stavHry == 2) {
+    data->stavHry = 4;
+  }
 
 
   if (pthread_create(&reader, NULL, checkInput, data) < 0) {

@@ -2,12 +2,25 @@
 
 
 
-void movement(snake_t* snake) {
+void movement(snake_t* snake, map_t* map) {
   int xTo = snake->position[0].x;
   int yTo = snake->position[0].y;
 
   snake->position[0].x += snake->nDirection[0];
   snake->position[0].y += snake->nDirection[1];
+  
+  if (map->type == EMPTY) {
+    if (snake->position[0].x == 0) {
+      snake->position[0].x = map->actualWidth - 2;
+    } else if (snake->position[0].x == map->actualWidth - 1) {
+      snake->position[0].x = 1;
+    } else if (snake->position[0].y == 0) {
+      snake->position[0].y = map->actualHeight - 2;
+    } else if (snake->position[0].y == map->actualHeight - 1) {
+      snake->position[0].y = 1;
+    }
+  }
+
   snake->direction[0] = snake->nDirection[0];
   snake->direction[1] = snake->nDirection[1];
   for (int i = 1; i < snake->size; i++) {
@@ -47,6 +60,7 @@ void redraw(snake_t* snake, position_t* apple, map_t* map, int collision) {
     map->map[snake->position[0].y][snake->position[0].x] = SNAKE_HEAD;
     map->map[snake->position[1].y][snake->position[1].x] = SNAKE_BODY;
     snake->size++;
+    snake->points[snake->snakeNum - 1]++;
     placeApple(map, apple);
   } else {
     for (int i = 1; i < snake->size + 1; i++) {
@@ -66,6 +80,7 @@ int initMap(map_t* map, int fromFile, char* fileName, int width, int height) {
       perror("Chyba vo formate file");
       return -1;
     }
+    map->type = FROM_FILE;
     setSpawn(map, snakeX, snakeY);
     map->actualWidth = fWidth;
     map->actualHeight = fHeight;
@@ -77,6 +92,7 @@ int initMap(map_t* map, int fromFile, char* fileName, int width, int height) {
 
     fclose(fptr);
   } else {
+    map->type = EMPTY;
     setSpawn(map, 0, 0);
     map->actualWidth = width + 2;
     map->actualHeight = height + 2;
@@ -110,6 +126,8 @@ void initSnake(map_t* map, snake_t* snake) {
   snake->position[1].x = map->spawnX;
   snake->position[1].y = map->spawnY;
   map->map[snake->position[0].y][snake->position[0].x] = SNAKE_HEAD;
+  snake->snakeNum++;
+  snake->points[snake->snakeNum - 1] = 0;
 }
 
 void setSpawn(map_t* map, int posX, int posY) {
