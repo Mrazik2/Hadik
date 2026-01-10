@@ -177,6 +177,7 @@ int main(int argc, char **argv) {
     return -5;
   }
   
+  srand(time(NULL));
 
   map_t map;
   int fromFile;
@@ -185,6 +186,7 @@ int main(int argc, char **argv) {
   } else {
     fromFile = 0;
   }
+
   if (initMap(&map, fromFile, argv[6], atoi(argv[4]), atoi(argv[5])) == -1) {
     close(clientData.client_fd);
     close(serverData.server_fd);
@@ -195,6 +197,7 @@ int main(int argc, char **argv) {
   data.map = &map;
 
   snake_t snake;
+
   
   if (strcmp(argv[1], "c") == 0) {
     data.timeLeft = atoi(argv[3]);

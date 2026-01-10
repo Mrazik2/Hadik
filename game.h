@@ -11,6 +11,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 typedef enum {
   FROZEN = 1,
@@ -35,12 +36,17 @@ typedef struct {
   char map[MAX_HEIGHT][MAX_WIDTH];
   int actualWidth;
   int actualHeight;
+  int spawnX;
+  int spawnY;
 } map_t;
 
 void movement(snake_t* snake);
 int collisionCheck(snake_t* snake, position_t* apple, map_t* map);
 void redraw(snake_t* snake, position_t* apple, map_t* map, int collision);
 int initMap(map_t* map, int fromFile, char* fileName, int width, int height);
-int initGame(map_t* map, snake_t* snake, position_t* apple);
+void initGame(map_t* map, snake_t* snake, position_t* apple);
+void initSnake(map_t* map, snake_t* snake);
+void setSpawn(map_t* map, int posX, int posY);
+void placeApple(map_t* map, position_t* apple);
 
 #endif

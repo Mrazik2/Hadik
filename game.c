@@ -47,7 +47,7 @@ void redraw(snake_t* snake, position_t* apple, map_t* map, int collision) {
     map->map[snake->position[0].y][snake->position[0].x] = SNAKE_HEAD;
     map->map[snake->position[1].y][snake->position[1].x] = SNAKE_BODY;
     snake->size++;
-    //map->map[apple->y][apple->x] = APPLE_IMG;
+    placeApple(map, apple);
   } else {
     for (int i = 1; i < snake->size + 1; i++) {
       map->map[snake->position[i].y][snake->position[i].x] = ' ';
@@ -59,24 +59,25 @@ void redraw(snake_t* snake, position_t* apple, map_t* map, int collision) {
 int initMap(map_t* map, int fromFile, char* fileName, int width, int height) {
   if (fromFile) {
     FILE* fptr = fopen(fileName, "r");
-    int fWidth;
-    int fHeight;
-    char buffer[MAX_WIDTH + 1];
-    if (fscanf(fptr, "%d %d", &fWidth, &fHeight) < 2) {
+    char buffer[MAX_WIDTH + 10];
+    int fWidth, fHeight, snakeX, snakeY;
+    if (fscanf(fptr, "%d %d %d %d", &fWidth, &fHeight, &snakeX, &snakeY) < 4) {
       fclose(fptr);
       perror("Chyba vo formate file");
       return -1;
     }
+    setSpawn(map, snakeX, snakeY);
     map->actualWidth = fWidth;
     map->actualHeight = fHeight;
+    fgets(buffer, MAX_WIDTH + 10, fptr);
     for (int i = 0; i < fHeight; i++) {
-      memset(buffer, 0, MAX_WIDTH + 1);
-      fgets(buffer, MAX_WIDTH, fptr);
-      strcpy(map->map[i], buffer);
+      fgets(buffer, MAX_WIDTH + 10, fptr);
+      strncpy(map->map[i], buffer, fWidth);
     }
 
     fclose(fptr);
   } else {
+    setSpawn(map, 0, 0);
     map->actualWidth = width + 2;
     map->actualHeight = height + 2;
     memset(map->map[0], '#', map->actualWidth);
@@ -91,19 +92,44 @@ int initMap(map_t* map, int fromFile, char* fileName, int width, int height) {
   return 0;
 }
 
-int initGame(map_t* map, snake_t* snake, position_t* apple) {
+void initGame(map_t* map, snake_t* snake, position_t* apple) {
+  initSnake(map, snake);
+
+  placeApple(map, apple);
+}
+
+void initSnake(map_t* map, snake_t* snake) {
   snake->size = 1;
   snake->direction[0] = 1;
   snake->direction[1] = 0;
   snake->nDirection[0] = 1;
   snake->nDirection[1] = 0;
   snake->state = ALIVE;
-
-  snake->position[0].x = 4;
-  snake->position[0].y = 8;
-  apple->x = 8;
-  apple->y = 8;
+  snake->position[0].x = map->spawnX;
+  snake->position[0].y = map->spawnY;
+  snake->position[1].x = map->spawnX;
+  snake->position[1].y = map->spawnY;
   map->map[snake->position[0].y][snake->position[0].x] = SNAKE_HEAD;
+}
+
+void setSpawn(map_t* map, int posX, int posY) {
+  if (posX == 0 && posY == 0) {
+    map->spawnX = 2;
+    map->spawnY = 2;
+  } else {
+    map->spawnX = posX;
+    map->spawnY = posY;
+  }
+}
+
+void placeApple(map_t* map, position_t* apple) {
+  int x = 0;
+  int y = 0;
+  while (map->map[y][x] != ' ' || (x == map->spawnX && y == map->spawnY)) {
+    x = 1 + rand() % (map->actualWidth - 2);
+    y = 1 + rand() % (map->actualHeight - 2);
+  }
+  apple->x = x;
+  apple->y = y;
   map->map[apple->y][apple->x] = APPLE_IMG;
-  return 0;
 }
