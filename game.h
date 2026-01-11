@@ -56,7 +56,7 @@ typedef struct {
 } map_t;
 
 void movement(snake_t* snake, map_t* map);
-int collisionCheck(snake_t* snake, position_t* apple, map_t* map);
+int collisionCheck(snake_t* snake, map_t* map);
 void redraw(snake_t* snake, position_t* apple, map_t* map, int collision);
 int initMap(map_t* map, int fromFile, char* fileName, int width, int height);
 void initGame(map_t* map, snake_t* snake, position_t* apple);

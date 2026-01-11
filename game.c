@@ -37,7 +37,7 @@ void movement(snake_t* snake, map_t* map) {
   snake->position[snake->size].y = yTo;
 }
 
-int collisionCheck(snake_t* snake, position_t* apple, map_t* map) {
+int collisionCheck(snake_t* snake, map_t* map) {
   int headX = snake->position[0].x;
   int headY = snake->position[0].y;
   if (map->map[headY][headX] == ' ') {

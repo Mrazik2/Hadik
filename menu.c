@@ -1,7 +1,7 @@
 #include "menu.h"
 
 int mainMenu(int oldSelected) {
-  int itemCount = 3;
+  int itemCount = 4;
   int selected = oldSelected;
 
   while(1) {
@@ -9,10 +9,11 @@ int mainMenu(int oldSelected) {
 
     mvaddstr(1, 10, NEW);
     mvaddstr(2, 10, CONTINUE);
-    mvaddstr(3, 10, END);
+    mvaddstr(3, 10, JOIN);
+    mvaddstr(4, 10, END);
 
     if (selected >= 0 && selected < itemCount) {
-      mvchgat(selected + 1, 10, 14, A_STANDOUT, 1, NULL);
+      mvchgat(selected + 1, 10, 15, A_STANDOUT, 1, NULL);
     }
 
     refresh();
@@ -29,7 +30,7 @@ int mainMenu(int oldSelected) {
   }
 }
 
-int newGameMenu() {
+int newGameMenu(int port) {
   char gameMode[2];
   gameMode[1] = 0;
   char worldType[2];
@@ -42,6 +43,9 @@ int newGameMenu() {
 
   char timeIn[4];
   char fileName[50];
+
+  char portStr[10];
+  sprintf(portStr, "%d", port);
 
   clear();
   mvaddstr(1, 10, "Zvol herny rezim - standardny alebo casovy (s/c)");
@@ -196,12 +200,45 @@ int newGameMenu() {
     perror("Fork zlyhal");
     exit(-1);
   } else if (id == 0) {
-    execlp("./server", "./server", gameMode, worldType, timeIn, width, height, fileName, NULL);
-    fprintf(stderr, "execlp failed\n");
+    execlp("./server", "./server", gameMode, worldType, timeIn, width, height, fileName, portStr, NULL);
+    perror("execlp failed");
     _exit(-1);
   }
   
   
   return 1;
 
+}
+
+int joinGameMenu() {
+  char port[7];
+  port[6] = 0;
+
+  while (1) {
+    clear();
+    int input = 0;
+    mvaddstr(1, 10, "Zadaj port servera");
+
+
+    getnstr(port, 6);
+
+    while (1) {
+      clear();
+      mvaddstr(1, 10, "Napisal si:");
+      mvaddstr(2, 10, port);
+      mvaddstr(4, 10, "Potvrd vyber (y/n)");
+
+      input = getch();
+        
+      if (input == 'y' || input == 'n') {
+        break;
+      }
+    }
+
+    if (input == 'y' && atoi(port) > 10000) {
+      break;
+    }
+  }
+
+  return atoi(port);
 }

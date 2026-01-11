@@ -47,7 +47,9 @@ void* readInput(void* arg) {
 
   while (data->snake->state != GAME_OVER) {
     if (recvAll(data->client_data->client_fd, &buffer, sizeof(buffer)) < 0) {
+      pthread_mutex_lock(data->mutex);
       data->snake->state = LEFT;
+      pthread_mutex_unlock(data->mutex);
       sleep(1);
       continue;
     }
@@ -157,7 +159,7 @@ void* gameLoop(void* arg) {
     if (data->snake->state == ALIVE) {
       pthread_mutex_lock(data->mutex);
       movement(data->snake, data->map);
-      int coll = collisionCheck(data->snake, data->apple, data->map);
+      int coll = collisionCheck(data->snake, data->map);
       if (coll == 2) {
         justDied = 1;
       }
@@ -213,6 +215,7 @@ void* gameLoop(void* arg) {
     }
   }
 
+  
   if (finalSend) {
     state = data->snake->state;
     sendAll(data->client_data->client_fd, &state, sizeof(state));
@@ -238,7 +241,7 @@ int main(int argc, char **argv) {
   data_t data;
   data.client_data = &clientData;
 
-  if (argc != 7) {
+  if (argc != 8) {
     perror("Malo argumentov");
     exit(-1);
   }
@@ -259,7 +262,7 @@ int main(int argc, char **argv) {
   memset(&serverData.server_addr, 0, sizeof(serverData.server_addr));
   serverData.server_addr.sin_family = AF_INET;
   serverData.server_addr.sin_addr.s_addr = INADDR_ANY;
-  serverData.server_addr.sin_port = htons(PORT);
+  serverData.server_addr.sin_port = htons(atoi(argv[7]));
 
   if (bind(serverData.server_fd, (struct sockaddr*)&serverData.server_addr, sizeof(serverData.server_addr)) < 0) {
     close(serverData.server_fd);
